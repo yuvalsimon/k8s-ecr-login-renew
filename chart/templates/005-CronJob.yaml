@@ -68,6 +68,10 @@ spec:
             - name: DOCKER_REGISTRIES
               value: {{ .Values.registries }}
 {{- end }}
+{{- if .Values.secretAnnotations }}
+            - name: SECRET_ANNOTATIONS
+              value: {{ .Values.secretAnnotations | toJson | quote }}
+{{- end }}
 {{- with .Values.tolerations }}
           tolerations:
             {{- toYaml . | nindent 12 }}

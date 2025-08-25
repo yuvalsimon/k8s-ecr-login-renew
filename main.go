@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"k8s-ecr-login-renew/src/aws"
@@ -11,16 +12,32 @@ import (
 )
 
 const (
-	envVarAwsSecret        = "DOCKER_SECRET_NAME"
-	envVarTargetNamespace  = "TARGET_NAMESPACE"
-	envVarExcludeNamespace = "EXCLUDE_NAMESPACE"
-	envVarRegistries       = "DOCKER_REGISTRIES"
+	envVarAwsSecret         = "DOCKER_SECRET_NAME"
+	envVarTargetNamespace   = "TARGET_NAMESPACE"
+	envVarExcludeNamespace  = "EXCLUDE_NAMESPACE"
+	envVarRegistries        = "DOCKER_REGISTRIES"
+	envVarSecretAnnotations = "SECRET_ANNOTATIONS"
 )
 
 func checkErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func getSecretAnnotations() (map[string]string, error) {
+	annotationsStr := os.Getenv(envVarSecretAnnotations)
+	if annotationsStr == "" {
+		return make(map[string]string), nil
+	}
+
+	var annotations map[string]string
+	err := json.Unmarshal([]byte(annotationsStr), &annotations)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse secret annotations: %v", err)
+	}
+
+	return annotations, nil
 }
 
 func main() {
@@ -36,6 +53,15 @@ func main() {
 	checkErr(err)
 	fmt.Println("Success.")
 
+	fmt.Print("Parsing secret annotations... ")
+	annotations, err := getSecretAnnotations()
+	checkErr(err)
+	if len(annotations) > 0 {
+		fmt.Printf("Found %d annotations\n", len(annotations))
+	} else {
+		fmt.Println("No annotations configured")
+	}
+
 	servers := getServerList(credentials.Server)
 	fmt.Printf("Docker Registries: %s\n", strings.Join(servers, ","))
 
@@ -48,7 +74,7 @@ func main() {
 	failed := false
 	for _, ns := range namespaces {
 		fmt.Printf("Updating secret in namespace [%s]... ", ns)
-		err = k8s.UpdatePassword(ns, name, credentials.Username, credentials.Password, servers)
+		err = k8s.UpdatePassword(ns, name, credentials.Username, credentials.Password, servers, annotations)
 		if nil != err {
 			fmt.Printf("failed: %s\n", err)
 			failed = true

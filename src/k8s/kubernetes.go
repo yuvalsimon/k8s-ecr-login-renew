@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os/user"
+	"path/filepath"
+	"strings"
+
 	coreV1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"os/user"
-	"path/filepath"
-	"strings"
 )
 
 type config struct {
@@ -81,15 +82,18 @@ func getConfig(username, password string, servers []string) ([]byte, error) {
 	return configJson, nil
 }
 
-func createSecret(name string) *coreV1.Secret {
+func createSecret(name string, annotations map[string]string) *coreV1.Secret {
 	secret := coreV1.Secret{}
 	secret.Name = name
 	secret.Type = coreV1.SecretTypeDockerConfigJson
 	secret.Data = map[string][]byte{}
+	if len(annotations) > 0 {
+		secret.Annotations = annotations
+	}
 	return &secret
 }
 
-func UpdatePassword(namespace, name, username, password string, servers []string) error {
+func UpdatePassword(namespace, name, username, password string, servers []string, annotations map[string]string) error {
 	client, err := GetClient()
 	if nil != err {
 		return err
@@ -106,13 +110,22 @@ func UpdatePassword(namespace, name, username, password string, servers []string
 	}
 
 	if secret == nil {
-		secret = createSecret(name)
+		secret = createSecret(name, annotations)
 		secret.Data[coreV1.DockerConfigJsonKey] = configJson
 		_, err = client.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metaV1.CreateOptions{})
 		return err
 	}
 
 	secret.Data[coreV1.DockerConfigJsonKey] = configJson
+	// Apply annotations to existing secret
+	if len(annotations) > 0 {
+		if secret.Annotations == nil {
+			secret.Annotations = make(map[string]string)
+		}
+		for key, value := range annotations {
+			secret.Annotations[key] = value
+		}
+	}
 	_, err = client.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metaV1.UpdateOptions{})
 
 	if err == nil {
@@ -125,7 +138,7 @@ func UpdatePassword(namespace, name, username, password string, servers []string
 		return err
 	}
 
-	secret = createSecret(name)
+	secret = createSecret(name, annotations)
 	secret.Data[coreV1.DockerConfigJsonKey] = configJson
 	_, err = client.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metaV1.CreateOptions{})
 	return err

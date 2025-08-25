@@ -65,5 +65,8 @@ aws:
 # Pod annotations for the pods that are created by the cronjob
 podAnnotations: {}
 
+# Annotations to be added to the Docker secrets created by the cronjob
+secretAnnotations: {}
+
 # Pod tolerations for the cron job
 tolerations: {}
